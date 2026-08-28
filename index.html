@@ -81,9 +81,15 @@ body{
 
 .climber{
   position:absolute; bottom:0;
-  width:78px; height:78px; margin-left:-39px;
+  width:78px; height:156px; margin-left:-39px;
   background-image:url("climber.png");
-  background-size:600% 100%;      /* 6 格并排 · a 6-frame strip */
+  background-size:600% 100%;      /* 6 格并排 · a 6-frame strip。
+     每一格的宽高比要跟 .climber 的宽高比一致，图片才不会被拉扁或拉长。
+     换图时若新图每格不是 1:2（宽:高），这里的 height 要跟着改：
+     height = width ÷ (新图单格宽度 ÷ 单格高度)
+     The frame's aspect ratio here must match the image's per-frame aspect ratio,
+     or the art will look squashed/stretched. If a future image's frames aren't
+     1:2 (width:height), recompute height = width ÷ (frame_width ÷ frame_height). */
   background-position-x:0%;
   image-rendering:auto;
   filter:drop-shadow(0 6px 6px rgba(0,0,0,.5));
@@ -286,8 +292,9 @@ const DEADZONE   = .45;   // 人爬到画面这么高就不再往上，改成画
                           // the climber rises to this height, then the wall scrolls
 const CLIMB_MS   = 450;   // 一次攀爬动作的时长
 const PENALTY_MS = 3000;  // 答错扣多少毫秒
-const FOOT_TRIM  = 3;     // 图里猴子的脚离图片底边还有这么几个点
+const FOOT_TRIM  = 11;    // 图里角色的脚离图片底边还有这么几个点（按站立那一格量的）
                           // the sprite's feet sit this many px above its own bottom edge
+                          // (measured from the standing frame)
 
 /* 山壁图上那些石台的位置，从下往上排。x 是石台中心，y 是石台上表面，
    两个都是「占整张图的几分之几」，所以换成别的尺寸也不用改。
