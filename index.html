@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>攀山快答 · 教师改编版</title>
+<style>
+/* ============================================================
+   样式 · Styles
+   想换颜色、换字体大小，改这里就好。
+   ============================================================ */
+
+:root{
+  --ink:      #1c1813;   /* 深色底 · dark panel      */
+  --cream:    #f6efe2;   /* 浅色字 · light text      */
+  --gold:     #e0a83c;   /* 强调色 · accent          */
+  --green:    #4e9d52;   /* 答对   · correct         */
+  --red:      #c4553f;   /* 答错   · wrong           */
+  --stone:    #2b251d;   /* 按钮底 · button surface  */
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  background:var(--ink);
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  color:var(--cream);
+  -webkit-text-size-adjust:100%;
+  overscroll-behavior:none;
+}
+
+.stage{
+  position:relative; width:100%;
+  height:100vh; height:100dvh;
+  overflow:hidden; background:#0d1b2a;
+}
+
+/* 「词山学海」的风景，压暗当背景 · the VocabSummit landscape, dimmed
+   想更亮或更暗，改下面两个 rgba 的最后一个数字（0 = 全亮，1 = 全黑）
+   To fade it more or less, change the last number in the two rgba values. */
+.sky{
+  position:absolute; inset:0; z-index:0;
+  background-image:
+    linear-gradient(rgba(20,17,13,.45), rgba(20,17,13,.62)),
+    url("landscape.jpg");
+  background-size:cover;          /* 自动适应任何屏幕 · scales to any screen */
+  background-position:center;
+  background-repeat:no-repeat;
+}
+
+/* 手机上下排，电脑左右排 · stacked on phones, side by side on laptops */
+.board{
+  position:relative; z-index:1; height:100%;
+  display:flex; flex-direction:column;
+  width:100%; max-width:480px; margin:0 auto;
+}
+
+/* --- 攀爬区 · the climbing view --------------------------- */
+.climb{ position:relative; flex:1 1 auto; overflow:hidden; min-height:150px; }
+
+.wall{
+  position:absolute; top:0; bottom:0; left:50%; transform:translateX(-50%);
+  width:78%; max-width:340px;
+  background-image:url("wall.jpg");
+  background-size:100% auto;
+  background-repeat:repeat-y;
+  background-position-y:0px;
+  transition:background-position-y .45s ease-out;
+  box-shadow:0 0 30px 12px rgba(0,0,0,.55);
+}
+
+/* 落脚点不用画：山壁那张图上本来就有石台，人直接站上去。
+   位置记在下面的 WALL_LEDGES 里。
+   The ledges are not drawn. The wall art already has stone shelves on it and
+   the climber stands on those; WALL_LEDGES below holds where they are. */
+/* 人放在这个盒子里，跟山壁对齐 · same box as the wall, so they line up */
+.wallbox{
+  position:absolute; top:0; bottom:0; left:50%; transform:translateX(-50%);
+  width:78%; max-width:340px; pointer-events:none;
+}
+
+.climber{
+  position:absolute; bottom:0;
+  width:78px; height:78px; margin-left:-39px;
+  background-image:url("climber.png");
+  background-size:600% 100%;      /* 6 格并排 · a 6-frame strip */
+  background-position-x:0%;
+  image-rendering:auto;
+  filter:drop-shadow(0 6px 6px rgba(0,0,0,.5));
+  transition:bottom .45s ease-out, left .45s ease-out;
+  /* 画里的猴子是朝右的。--face 用 -1 把它翻过来朝左。
+     The drawing faces right. --face flips it to -1 to face left. */
+  transform:scaleX(var(--face, 1));
+}
+/* 跳跃时的抛物线 · the arc of a hop.
+   每一帧都要带上 scaleX，不然动画一跑，朝向就被冲掉了。
+   Every frame carries the scaleX too: the animation writes transform, so
+   leaving it out of a single frame would wipe the facing mid-hop. */
+.climber.hop{ animation:hop .45s ease-out; }
+@keyframes hop{
+  0%{ transform:translateY(0) scaleX(var(--face, 1)) }
+  45%{ transform:translateY(-20px) scaleX(var(--face, 1)) }
+  100%{ transform:translateY(0) scaleX(var(--face, 1)) }
+}
+
+/* --- 顶部信息 · the HUD ----------------------------------- */
+.hud{
+  position:absolute; top:0; left:0; right:0;
+  display:flex; gap:8px; padding:10px 12px;
+  font-variant-numeric:tabular-nums;
+}
+.hud div{
+  flex:1; text-align:center; padding:6px 4px; border-radius:10px;
+  background:rgba(18,15,11,.72); border:1px solid rgba(224,168,60,.28);
+}
+.hud b{ display:block; font-size:1.35rem; line-height:1.1; color:var(--gold); }
+.hud span{ font-size:.7rem; opacity:.75; letter-spacing:.08em; }
+.hud .low b{ color:var(--red); }
+
+/* --- 出题区 · the question panel -------------------------- */
+.panel{
+  flex:0 0 auto; padding:14px 14px calc(14px + env(safe-area-inset-bottom));
+  background:rgba(28,24,19,.94); border-top:2px solid rgba(224,168,60,.35);
+}
+.panel.shake{ animation:shake .34s; }
+@keyframes shake{
+  0%,100%{ transform:translateX(0) }
+  20%{ transform:translateX(-9px) } 40%{ transform:translateX(8px) }
+  60%{ transform:translateX(-5px) } 80%{ transform:translateX(4px) }
+}
+
+.word{
+  text-align:center; font-size:clamp(1.7rem,7vw,2.3rem); font-weight:700;
+  letter-spacing:.14em; color:var(--gold); margin-bottom:12px;
+}
+
+.options{ display:flex; flex-direction:column; gap:8px; }
+.options button{
+  width:100%; text-align:left; font:inherit; font-size:clamp(.9rem,3.6vw,1rem);
+  line-height:1.45; color:var(--cream); cursor:pointer;
+  background:var(--stone); border:1px solid rgba(246,239,226,.16);
+  border-radius:11px; padding:11px 13px;
+  display:flex; gap:10px; align-items:flex-start;
+  transition:background .12s, border-color .12s;
+}
+.options button .n{
+  flex:0 0 auto; width:1.35em; height:1.35em; border-radius:50%;
+  background:rgba(224,168,60,.2); color:var(--gold);
+  font-size:.8em; display:grid; place-items:center; margin-top:.15em;
+}
+.options button:hover{ background:#3a3126; }
+.options button.right{ background:var(--green); border-color:var(--green); }
+.options button.wrong{ background:var(--red);   border-color:var(--red);   }
+
+/* --- 覆盖画面 · start / end / error overlays -------------- */
+.screen{
+  position:absolute; inset:0; z-index:5;
+  display:none; flex-direction:column; justify-content:center; align-items:center;
+  gap:14px; padding:28px; text-align:center;
+  background:rgba(12,10,8,.74); backdrop-filter:blur(4px);
+}
+.screen.on{ display:flex; }
+.screen h1{ font-size:clamp(1.6rem,7vw,2.1rem); letter-spacing:.1em; color:var(--gold); }
+.screen p{ font-size:.95rem; line-height:1.7; opacity:.88; max-width:24em; }
+.screen .big{ font-size:2.6rem; font-weight:700; color:var(--cream); line-height:1.2; }
+.screen button{
+  font:inherit; font-size:1.05rem; font-weight:600; letter-spacing:.1em;
+  padding:12px 30px; border-radius:99px; cursor:pointer;
+  background:var(--gold); color:#20180a; border:none;
+}
+.screen .fine{ font-size:.78rem; opacity:.6; letter-spacing:.04em; }
+
+/* 出错画面的字要左对齐才读得清楚 · errors read better left-aligned */
+#errScreen{ background:#2a1512; }
+#errScreen .box{
+  text-align:left; background:rgba(0,0,0,.35); border:1px solid rgba(196,85,63,.5);
+  border-radius:12px; padding:16px 18px; max-width:27em; line-height:1.75; font-size:.95rem;
+}
+#errScreen code{ background:rgba(224,168,60,.14); color:var(--gold); padding:1px 5px; border-radius:4px; }
+
+/* ============================================================
+   电脑屏幕：左边是山壁，右边是题目
+   Laptops and tablets in landscape: cliff on the left, question on the right.
+   ============================================================ */
+@media (min-width:840px) and (min-height:520px){
+  .board{
+    flex-direction:row; align-items:center; justify-content:center;
+    max-width:1180px; gap:34px; padding:30px;
+  }
+  .climb{
+    flex:0 0 clamp(300px, 30vw, 400px);
+    height:min(84dvh, 760px);
+    border-radius:18px;
+    border:1px solid rgba(224,168,60,.22);
+    box-shadow:0 24px 60px rgba(0,0,0,.5);
+  }
+  .wall,
+  .wallbox{ width:100%; max-width:none; }
+  .wall{ box-shadow:none; }
+  .panel{
+    flex:0 1 540px; align-self:center;
+    padding:30px 30px 32px;
+    border:1px solid rgba(224,168,60,.22); border-top:2px solid rgba(224,168,60,.35);
+    border-radius:18px; box-shadow:0 24px 60px rgba(0,0,0,.5);
+  }
+  .word{ font-size:2.6rem; margin-bottom:20px; }
+  .options{ gap:11px; }
+  .options button{ font-size:1.05rem; padding:14px 16px; }
+  .hud b{ font-size:1.5rem; }
+  .screen h1{ font-size:2.6rem; }
+  .screen .big{ font-size:3.4rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <div class="sky"></div>
+
+  <div class="board">
+    <div class="climb">
+      <div class="wall" id="wall"></div>
+      <div class="wallbox">
+        <div class="climber" id="climber"></div>
+      </div>
+      <div class="hud">
+        <div id="timeBox"><b id="time">--</b><span>秒</span></div>
+        <div><b id="alt">0</b><span>海拔（米）</span></div>
+        <div><b id="score">0</b><span>答对</span></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="word" id="word">攀山快答</div>
+      <div class="options" id="options"></div>
+    </div>
+  </div>
+
+  <!-- 开始画面 -->
+  <div class="screen on" id="startScreen">
+    <h1>攀山快答</h1>
+    <p id="startInfo"></p>
+    <button id="startBtn">开始攀登</button>
+    <p class="fine">答对往上爬一格 · 答错扣三秒</p>
+  </div>
+
+  <!-- 结束画面 -->
+  <div class="screen" id="endScreen">
+    <h1>登顶了</h1>
+    <div class="big"><span id="finalAlt">0</span> 米</div>
+    <p>答对 <b id="finalScore">0</b> 题</p>
+    <button id="againBtn">再爬一次</button>
+  </div>
+
+  <!-- 出错画面：宁可看到这个，也不要看到一片空白 -->
+  <div class="screen" id="errScreen">
+    <h1>词语表好像有点问题</h1>
+    <div class="box" id="errMsg"></div>
+    <p class="fine">改好 my-words.js 之后，回到这个页面重新整理（刷新）就行。</p>
+  </div>
+
+</div>
+
+<script>
+/* 先架好一张网，接住 my-words.js 里的写错 —— 这样才报得出第几行
+   Catch errors thrown by my-words.js so we can tell the teacher which line */
+window.__wordsError = null;
+window.addEventListener('error', function(e){
+  if (!window.__wordsError && e.filename && e.filename.indexOf('my-words.js') !== -1)
+    window.__wordsError = { line: e.lineno, message: e.message };
+}, true);
+</script>
+
+<!-- 老师改的是这个文件 · this is the file teachers edit -->
+<script src="my-words.js"></script>
+
+<script>
+/* ============================================================
+   游戏程序 · The game
+   这一段不用改。看得懂当然更好，看不懂也不影响使用。
+   You don't need to edit anything below.
+   ============================================================ */
+
+const DEADZONE   = .45;   // 人爬到画面这么高就不再往上，改成画面往下卷
+                          // the climber rises to this height, then the wall scrolls
+const CLIMB_MS   = 450;   // 一次攀爬动作的时长
+const PENALTY_MS = 3000;  // 答错扣多少毫秒
+const FOOT_TRIM  = 3;     // 图里猴子的脚离图片底边还有这么几个点
+                          // the sprite's feet sit this many px above its own bottom edge
+
+/* 山壁图上那些石台的位置，从下往上排。x 是石台中心，y 是石台上表面，
+   两个都是「占整张图的几分之几」，所以换成别的尺寸也不用改。
+   一张图用完就接下一张（山壁是上下无缝重复的），所以这张表就够爬到顶。
+   换掉 wall.jpg 的话，这张表要跟着重新量，不然人会踩空。
+
+   Where the stone shelves sit on the wall art, ordered bottom to top. x is the
+   centre of the shelf and y is its top surface, both as fractions of the image,
+   so they hold at any size. The wall tiles seamlessly, so the list repeats for
+   as high as anyone can climb. Swap wall.jpg and these have to be re-measured,
+   or the climber lands on thin air. */
+const WALL_LEDGES = [
+  { x: .369, y: .932 }, { x: .663, y: .860 }, { x: .165, y: .811 },
+  { x: .843, y: .714 }, { x: .297, y: .671 }, { x: .652, y: .587 },
+  { x: .244, y: .514 }, { x: .764, y: .466 }, { x: .317, y: .374 },
+  { x: .629, y: .301 }, { x: .206, y: .239 }, { x: .852, y: .189 },
+  { x: .631, y: .158 }, { x: .192, y: .082 }, { x: .846, y: .035 }
+];
+const TILE_RATIO = 837 / 600;   // wall.jpg 的高比宽 · the wall image's height over its width
+
+const $ = id => document.getElementById(id);
+const wall = $('wall'), climber = $('climber'), panel = $('panel');
+const wallbox = document.querySelector('.wallbox');
+
+
+let altitude = 0, score = 0, deadline = 0;
+let running = false, locked = false;
+let tickId = null, animId = null;
+let answer = null, recent = [];
+
+/* --- 检查老师填的词语表 · check the teacher's word list ---- */
+function findProblem(){
+  if (typeof VOCAB === 'undefined'){
+    const e = window.__wordsError;
+    if (e && e.line)
+      return '<code>my-words.js</code> 的 <b>第 ' + e.line + ' 行</b>附近写错了，整个文件都没能读进来。' +
+             '<br><br>九成是这三样之一：<br>' +
+             '· 行尾少了逗号 <code>,</code><br>' +
+             '· 引号 <code>"</code> 少了一边<br>' +
+             '· 大括号 <code>{</code> <code>}</code> 少了一边' +
+             '<br><br><span style="opacity:.6">浏览器原话：' + escapeHtml(e.message) + '</span>';
+    return '读不到词语表。<br><br>两种可能：<br>' +
+           '· <code>my-words.js</code> 这个文件不见了，或者文件名被改掉了<br>' +
+           '· 文件里有个地方写错了（多半是少了逗号或引号）';
+  }
+  if (!Array.isArray(VOCAB))
+    return '<code>VOCAB</code> 不是一个列表。<br>请检查最外面的方括号 <code>[</code> 和 <code>]</code> 有没有被删掉。';
+  if (VOCAB.length < 4)
+    return '词语太少了。<br>现在只有 <b>' + VOCAB.length + '</b> 个，至少要 <b>4</b> 个才出得了四个选项（建议 8 个以上）。';
+  for (let i = 0; i < VOCAB.length; i++){
+    const v = VOCAB[i];
+    if (!v || typeof v.word !== 'string' || typeof v.def !== 'string' || !v.word.trim() || !v.def.trim())
+      return '第 <b>' + (i + 1) + '</b> 个词语写得不完整。<br>每一行都要长这样：<br><code>{ word: "词语", def: "释义" },</code>';
+  }
+  const distinct = new Set(VOCAB.map(v => v.def.trim()));
+  if (distinct.size < 4)
+    return '不一样的释义只有 <b>' + distinct.size + '</b> 个。<br>四个选项凑不齐，请让至少 4 个词语的释义各不相同。';
+  if (typeof SECONDS === 'undefined' || !(Number(SECONDS) > 0))
+    return '<code>SECONDS</code>（每局几秒）不见了，或者不是一个数字。<br>请确认有这么一行：<br><code>const SECONDS = 90;</code>';
+  if (typeof UNIT_NAME === 'undefined')
+    return '<code>UNIT_NAME</code>（单元名称）不见了。<br>请确认有这么一行：<br><code>const UNIT_NAME = "中三 单元一";</code>';
+  return null;
+}
+
+function showError(html){
+  $('errMsg').innerHTML = html;
+  $('startScreen').classList.remove('on');
+  $('errScreen').classList.add('on');
+}
+
+/* --- 出题 · build a question ------------------------------ */
+function shuffle(a){
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function nextQuestion(){
+  let pool = VOCAB.filter(v => !recent.includes(v.word));
+  if (!pool.length){ recent = []; pool = VOCAB.slice(); }
+  answer = pool[Math.floor(Math.random() * pool.length)];
+
+  recent.push(answer.word);
+  if (recent.length > Math.min(5, VOCAB.length - 1)) recent.shift();
+
+  // 干扰项是从别的词语的释义里抓的，老师不必自己写错误答案
+  // Distractors come from other entries, so teachers never write wrong answers
+  const others = [];
+  for (const v of shuffle(VOCAB.slice())){
+    const d = v.def.trim();
+    if (d === answer.def.trim() || others.includes(d)) continue;
+    others.push(d);
+    if (others.length === 3) break;
+  }
+
+  $('word').textContent = answer.word;
+  const box = $('options');
+  box.innerHTML = '';
+  shuffle([answer.def, ...others]).forEach((def, i) => {
+    const b = document.createElement('button');
+    b.innerHTML = '<span class="n">' + (i + 1) + '</span><span>' + escapeHtml(def) + '</span>';
+    b.onclick = () => choose(b, def);
+    box.appendChild(b);
+  });
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* --- 答题 · answering ------------------------------------- */
+function choose(button, def){
+  if (!running || locked) return;
+  locked = true;
+
+  if (def.trim() === answer.def.trim()){
+    button.classList.add('right');
+    score++; $('score').textContent = score;
+    ascend();
+  } else {
+    button.classList.add('wrong');
+    deadline -= PENALTY_MS;
+    panel.classList.add('shake');
+    setTimeout(() => panel.classList.remove('shake'), 340);
+  }
+
+  setTimeout(() => {
+    locked = false;
+    if (running) nextQuestion();
+  }, 260);
+}
+
+/* --- 攀爬 · the climb ------------------------------------- */
+function setFrame(i){ climber.style.backgroundPositionX = (i * 20) + '%'; }
+
+/* 第 i 个石台在这张表里的第几个 · which shelf in the list ledge i is */
+const ledgeAt = i => WALL_LEDGES[((i % WALL_LEDGES.length) + WALL_LEDGES.length) % WALL_LEDGES.length];
+
+/* 山壁一张图在屏幕上有多高 · how tall one tile of the wall art is on screen */
+const tileH = () => wall.clientWidth * TILE_RATIO;
+
+/* 第 i 个石台离「第一张图的底边」有多高。爬满一张图就换下一张。
+   How high shelf i sits above the bottom of the first tile. Every full list
+   climbed is one more tile up the wall. */
+function ledgeH(i){
+  const tile = Math.floor(i / WALL_LEDGES.length);
+  return (tile + 1 - ledgeAt(i).y) * tileH();
+}
+
+/* 镜头跟随：人先往上爬，爬到画面的某个高度就不再往上，改成山壁往下卷。
+   A camera with a dead zone: the climber rises up the screen first, and once it
+   reaches DEADZONE of the way up, the wall scrolls instead. */
+function place(){
+  const H = wallbox.clientHeight;
+  // 图片和字体还没量好的时候，宽度会是 0，算出来的落点就全错。等下一帧再算。
+  // Before layout settles the wall can measure 0 wide, which would put the
+  // climber nowhere. Wait a frame and try again.
+  if (!wall.clientWidth || !H){ requestAnimationFrame(place); return; }
+
+  const worldY = ledgeH(altitude);
+  const scroll = Math.max(0, worldY - H * DEADZONE);
+
+  // 山壁摆成：不卷动时，第一张图的底边正好贴着画面底边。
+  // Park the wall so that, unscrolled, the first tile's bottom edge sits on the
+  // bottom edge of the view. Then the climber's height is simply worldY - scroll.
+  wall.style.backgroundPositionY = (H - tileH() + scroll) + 'px';
+  climber.style.bottom = (worldY - scroll - FOOT_TRIM) + 'px';
+  climber.style.left = (ledgeAt(altitude).x * 100) + '%';
+}
+
+/* 石台左右交错，所以每跳一次方向就换一次。猴子要面向它跳的方向，
+   不然看起来像在倒着跳。
+   The shelves zigzag, so every hop reverses direction and the climber has to
+   turn to face the way it is going, or it reads as jumping backwards. */
+function face(){
+  const from = ledgeAt(altitude - 1).x, to = ledgeAt(altitude).x;
+  climber.style.setProperty('--face', (to >= from) ? '1' : '-1');
+}
+
+function ascend(){
+  altitude++;
+  $('alt').textContent = altitude;
+  place();
+  face();
+
+  // 重新触发跳跃动画 · restart the hop animation
+  climber.classList.remove('hop');
+  void climber.offsetWidth;
+  climber.classList.add('hop');
+
+  clearInterval(animId);
+  let frame = 3, steps = 0;
+  setFrame(frame);
+  animId = setInterval(() => {
+    frame = (frame === 3) ? 4 : 3;
+    setFrame(frame);
+    if (++steps >= 4){ clearInterval(animId); setFrame(0); }
+  }, CLIMB_MS / 4);
+}
+
+/* --- 一局的开始与结束 · run start & end ------------------- */
+function startRun(){
+  altitude = 0; score = 0; recent = [];
+  running = true; locked = false;
+  deadline = performance.now() + Number(SECONDS) * 1000;
+
+  $('alt').textContent = '0';
+  $('score').textContent = '0';
+  place();
+  climber.classList.remove('hop');
+  // 开局先朝着下一跳的方向站着 · face the way the first hop will go
+  climber.style.setProperty('--face',
+    (WALL_LEDGES[1].x >= WALL_LEDGES[0].x) ? '1' : '-1');
+  setFrame(0);
+
+  $('startScreen').classList.remove('on');
+  $('endScreen').classList.remove('on');
+
+  nextQuestion();
+  clearInterval(tickId);
+  tickId = setInterval(tick, 100);
+  tick();
+}
+
+function tick(){
+  const left = Math.max(0, (deadline - performance.now()) / 1000);
+  $('time').textContent = Math.ceil(left);
+  $('timeBox').classList.toggle('low', left <= 10);
+  if (left <= 0) endRun();
+}
+
+function endRun(){
+  running = false;
+  clearInterval(tickId);
+  clearInterval(animId);
+  setFrame(5);                       // 举手庆祝 · the celebrate frame
+  $('finalAlt').textContent = altitude;
+  $('finalScore').textContent = score;
+  $('endScreen').classList.add('on');
+}
+
+/* --- 启动 · boot ------------------------------------------ */
+try {
+  const problem = findProblem();
+  if (problem){
+    showError(problem);
+  } else {
+    $('startInfo').innerHTML =
+      '<b>' + escapeHtml(UNIT_NAME) + '</b><br>' +
+      VOCAB.length + ' 个词语 · ' + Number(SECONDS) + ' 秒';
+    place();
+    $('startBtn').onclick = startRun;
+    $('againBtn').onclick = startRun;
+    setFrame(0);
+    // 转屏或改窗口大小，山壁的尺寸就变了，得重新算一次落点
+    // Rotating the phone resizes the wall, so the landing spots have to be redone
+    window.addEventListener('resize', place);
+    // 电脑上可以直接按 1 2 3 4 作答 · keys 1–4 work on a laptop
+    document.addEventListener('keydown', e => {
+      const i = '1234'.indexOf(e.key);
+      if (i >= 0) $('options').children[i]?.click();
+      if (e.key === 'Enter' && !running) $('startBtn').click();
+    });
+  }
+} catch (err){
+  showError('程序出错了：<br><code>' + escapeHtml(String(err.message || err)) + '</code>' +
+            '<br><br>多半是 <code>my-words.js</code> 里少了逗号、引号或大括号。');
+}
+</script>
+</body>
+</html>
